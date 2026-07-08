@@ -5,10 +5,10 @@
 import("//build/config/c++/c++.gni")
 import("//build/config/chrome_build.gni")
 import("//build/config/compiler_opt.gni")
-import("//build/config/features.gni")
 import("//build/config/sanitizers/sanitizers.gni")
 import("//build/config/sysroot.gni")
 import("//build/linux/strip_binary.gni")
+import("//build/timestamp.gni")
 import("//build/util/lastchange.gni")
 import("//build/util/process_version.gni")
 import("//chrome/version.gni")
@@ -19,6 +19,10 @@ import("//ui/gl/features.gni")
 import("//ui/qt/qt.gni")
 
 if (bundle_widevine_cdm) {
+  import("//media/cdm/library_cdm/cdm_paths.gni")
+}
+
+if (enable_library_cdms && !bundle_widevine_cdm) {
   import("//media/cdm/library_cdm/cdm_paths.gni")
 }
 
@@ -90,6 +94,12 @@ packaging_files_binaries = packaging_files_executables + packaging_files_shlibs
 # TODO(mmoss) Any convenient way to get all the relevant build files?
 # (e.g. all locales, resources, etc.)
 packaging_files = packaging_files_binaries + [
+                    "common/installer.py",
+                    "$root_out_dir/initial_preferences",
+                    "$root_out_dir/resources/inspector_overlay/inspector_overlay_resources.grd",
+                    "$root_out_dir/resources/inspector_overlay/main.js",
+                    "$root_out_dir/thorium.svg",
+                    "$root_out_dir/ui_resources_100_percent.pak",
                     "$root_out_dir/xdg-mime",
                     "$root_out_dir/xdg-settings",
                     "$root_out_dir/locales/en-US.pak",
@@ -120,6 +130,7 @@ action_foreach("calculate_deb_dependencies") {
     "debian/deb_version.py",
     "debian/dist_package_versions.json",
     "debian/package_version_interval.py",
+    "//build/action_helpers.py",
     "//third_party/dpkg-shlibdeps/dpkg-shlibdeps.pl",
   ]
   outputs = [ "$root_out_dir/deb_{{source_name_part}}.deps" ]
@@ -142,6 +153,7 @@ action("merge_deb_dependencies") {
     additional_deps,
     "debian/deb_version.py",
     "debian/package_version_interval.py",
+    "//build/action_helpers.py",
   ]
   outputs = [ "$root_out_dir/deb_common.deps" ]
   args = [
@@ -156,7 +168,10 @@ action_foreach("calculate_rpm_dependencies") {
   deps = [ ":installer_deps" ]
   script = "rpm/calculate_package_deps.py"
   sources = packaging_files_binaries
-  inputs = [ "rpm/dist_package_provides.json" ]
+  inputs = [
+    "rpm/dist_package_provides.json",
+    "//build/action_helpers.py",
+  ]
   outputs = [ "$root_out_dir/rpm_{{source_name_part}}.deps" ]
   args = [
     "{{source}}",
@@ -172,7 +187,10 @@ action("merge_rpm_dependencies") {
   deps = [ ":calculate_rpm_dependencies" ]
   script = "rpm/merge_package_deps.py"
   additional_deps = "rpm/additional_deps"
-  inputs = [ additional_deps ]
+  inputs = [
+    additional_deps,
+    "//build/action_helpers.py",
+  ]
   outputs = [ "$root_out_dir/rpm_common.deps" ]
   args = [
     "rpm_common.deps",
@@ -200,6 +218,35 @@ strip_binary("strip_chrome_management_service") {
 strip_binary("strip_chrome_sandbox") {
   binary_input = "$root_out_dir/chrome_sandbox"
   deps = [ "//sandbox/linux:chrome_sandbox" ]
+}
+
+strip_binary("strip_thorium_shell") {
+  testonly = true
+  binary_input = "$root_out_dir/thorium_shell"
+  deps = [ "//content/shell:thorium_shell" ]
+}
+
+if (enable_library_cdms) {
+  strip_binary("strip_clearkey_cdm") {
+    testonly = true
+    binary_input = "$root_out_dir/$clearkey_cdm_path/libclearkeycdm.so"
+    stripped_binary_output =
+        "$root_out_dir/$clearkey_cdm_path/libclearkeycdm.so.stripped"
+    deps = [ "//media/cdm/library_cdm/clear_key_cdm:clear_key_cdm_bin" ]
+  }
+}
+
+group("thorium_package_extras") {
+  testonly = true
+  deps = [
+    ":strip_thorium_shell",
+    "//chrome/test/chromedriver:chromedriver_server",
+    "//content/shell:copy_shell_resources",
+    "//content/shell:pak",
+  ]
+  if (enable_library_cdms) {
+    deps += [ ":strip_clearkey_cdm" ]
+  }
 }
 
 strip_binary("strip_libEGL_shlib") {
@@ -267,7 +314,6 @@ copy("common_packaging_files") {
     "common/default-app-block.template",
     "common/default-app.template",
     "common/desktop.template",
-    "common/installer.include",
     "common/postinst.include",
     "common/prerm.include",
     "common/repo.cron",
@@ -285,24 +331,30 @@ copy("common_packaging_files") {
     sources += [ "common/chromium-browser.info" ]
   }
 
-  sources += [ "//buildtools/third_party/eu-strip/bin/eu-strip" ]
-
   outputs = [ "$root_out_dir/installer/common/{{source_file_part}}" ]
 }
 
 copy("deb_packaging_files") {
   visibility = [ ":*" ]
   sources = [
-    "debian/build.sh",
     "debian/changelog.template",
     "debian/control.template",
-    "debian/debian.menu",
     # "debian/manual_recommends",
     "debian/postinst",
     "debian/postrm",
     "debian/prerm",
   ]
   outputs = [ "$root_out_dir/installer/debian/{{source_file_part}}" ]
+}
+
+generated_file("thorium_initial_preferences") {
+  outputs = [ "$root_out_dir/initial_preferences" ]
+  contents = "{\n}\n"
+}
+
+copy("thorium_svg") {
+  sources = [ "//chrome/app/theme/chromium/product_logo.svg" ]
+  outputs = [ "$root_out_dir/thorium.svg" ]
 }
 
 copy("theme_files") {
@@ -312,7 +364,6 @@ copy("theme_files") {
     "$branding_dir/linux/product_logo_128.png",
     "$branding_dir/linux/product_logo_24.png",
     "$branding_dir/linux/product_logo_256.png",
-    "$branding_dir/linux/product_logo_32.xpm",
     "$branding_dir/linux/product_logo_48.png",
     "$branding_dir/linux/product_logo_64.png",
     "$branding_dir_100/linux/product_logo_16.png",
@@ -329,9 +380,6 @@ copy("theme_files") {
       "$branding_dir/linux/product_logo_256_beta.png",
       "$branding_dir/linux/product_logo_256_canary.png",
       "$branding_dir/linux/product_logo_256_dev.png",
-      "$branding_dir/linux/product_logo_32_beta.xpm",
-      "$branding_dir/linux/product_logo_32_canary.xpm",
-      "$branding_dir/linux/product_logo_32_dev.xpm",
       "$branding_dir/linux/product_logo_48_beta.png",
       "$branding_dir/linux/product_logo_48_canary.png",
       "$branding_dir/linux/product_logo_48_dev.png",
@@ -352,10 +400,7 @@ copy("theme_files") {
 if (!is_chromeos) {
   copy("rpm_packaging_files") {
     visibility = [ ":*" ]
-    sources = [
-      "rpm/build.sh",
-      "rpm/thorium.spec.template",
-    ]
+    sources = [ "rpm/thorium.spec.template" ]
     outputs = [ "$root_out_dir/installer/rpm/{{source_file_part}}" ]
   }
 }
@@ -387,6 +432,8 @@ group("installer_deps") {
     ":strip_chrome_management_service",
     ":strip_chrome_sandbox",
     ":theme_files",
+    ":thorium_initial_preferences",
+    ":thorium_svg",
     "//chrome",
     "//chrome:packed_resources",
     "//chrome/browser/enterprise/connectors/device_trust/key_management/installer/management_service:chrome_management_service",
@@ -394,6 +441,8 @@ group("installer_deps") {
     "//components/crash/core/app:chrome_crashpad_handler",
     "//components/privacy_sandbox/privacy_sandbox_attestations/preload:component",
     "//sandbox/linux:chrome_sandbox",
+    "//third_party/devtools-frontend/src/inspector_overlay:build_inspector_overlay",
+    "//ui/resources:copy_ui_resources_100_percent",
   ]
   if (bundle_widevine_cdm) {
     public_deps += [ "//third_party/widevine/cdm" ]
@@ -457,7 +506,7 @@ template("linux_package") {
   deb_target_name = "${target_name}_deb"
   action(deb_target_name) {
     visibility = [ ":*" ]
-    script = "//build/gn_run_binary.py"
+    script = "debian/build.py"
 
     if (current_cpu == "x86") {
       deb_arch = "i386"
@@ -491,9 +540,10 @@ template("linux_package") {
     outputs = [ "$root_out_dir/${package}_${chrome_version_full}${_deb_name_suffix}.deb" ]
 
     args = [
-      rebase_path("$root_out_dir/installer/debian/build.sh", root_build_dir),
       "-a",
       deb_arch,
+      "-b",
+      build_timestamp,
       "-c",
       invoker.channel,
       "-d",
@@ -520,7 +570,7 @@ template("linux_package") {
     rpm_target_name = "${target_name}_rpm"
     action(rpm_target_name) {
       visibility = [ ":*" ]
-      script = "//build/gn_run_binary.py"
+      script = "rpm/build.py"
 
       if (current_cpu == "x86") {
         rpm_arch = "i386"
@@ -554,9 +604,10 @@ template("linux_package") {
       outputs = [ "$root_out_dir/${package}_${chrome_version_full}${_rpm_name_suffix}.rpm" ]
 
       args = [
-        rebase_path("$root_out_dir/installer/rpm/build.sh", root_build_dir),
         "-a",
         rpm_arch,
+        "-b",
+        build_timestamp,
         "-c",
         invoker.channel,
         "-d",

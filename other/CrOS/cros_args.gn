@@ -24,7 +24,7 @@ enable_profiling = false
 is_component_build = false
 symbol_level = 0
 # use_debug_fission = true
-enable_nacl = false
+# enable_nacl = false
 optimize_webui = true
 enable_webui_tab_strip = true
 is_clang = true
@@ -53,7 +53,7 @@ ffmpeg_branding = "Chrome"
 # Set to false for Polly build
 clang_use_chrome_plugins = true
 enable_ffmpeg_video_decoders = true
-is_component_ffmpeg = true
+is_component_ffmpeg = false
 use_webaudio_pffft = true
 use_vaapi = true
 enable_library_cdms = true

@@ -92,6 +92,7 @@ cp -r -v pak_src/binaries/pak-win/. ${CR_SRC_DIR}/out/thorium/ &&
 patchThor () {
 	cp -v other/add-hevc-ffmpeg-decoder-parser.patch ${CR_SRC_DIR}/third_party/ffmpeg/ &&
 	cp -v other/change-libavcodec-header.patch ${CR_SRC_DIR}/third_party/ffmpeg/ &&
+    cp -v other/fix-ffmpeg-android-x86-disable-hevc-nasm.patch ${CR_SRC_DIR}/third_party/ffmpeg/ &&
 	cp -v other/fix-policy-templates.patch ${CR_SRC_DIR}/ &&
 	cp -v other/ftp-support-thorium.patch ${CR_SRC_DIR}/ &&
 	cp -v other/restore_download_shelf.patch ${CR_SRC_DIR}/ &&
@@ -100,32 +101,49 @@ patchThor () {
 	cp -v other/mini_installer.patch ${CR_SRC_DIR}/ &&
 	cp -v other/open_in_same_tab.patch ${CR_SRC_DIR}/ &&
 	cp -v other/thorium_webui.patch ${CR_SRC_DIR}/ &&
+	cp -v other/thorium-debug-log-name.patch ${CR_SRC_DIR}/ &&
+	cp -v other/disable-ai-entrypoints-by-default.patch ${CR_SRC_DIR}/ &&
 	cp -v other/disable-privacy-sandbox.patch ${CR_SRC_DIR}/ &&
 	cp -v other/win_updater.patch ${CR_SRC_DIR}/ &&
 	cp -v other/keyboard_shortcuts.patch ${CR_SRC_DIR}/ &&
-	cp -v other/multi-language-translate.patch ${CR_SRC_DIR}/ &&
+	# gz83: Temporarily skip i18n patch.
+	# cp -v other/multi-language-translate.patch ${CR_SRC_DIR}/ &&
 	# Starting with M144, the following patches can be removed
-	cp -v other/partalloc.patch ${CR_SRC_DIR}/ &&
-	cp -v other/fix_profile_selector_crash.patch ${CR_SRC_DIR}/ &&
-	cp -v other/fix_getupdatesprocessor_crash.patch ${CR_SRC_DIR}/ &&
-	cp -v other/fix_absl_undefined_symbol.patch ${CR_SRC_DIR}/ &&
-	cp -v other/fix_file_dialog_crash.patch ${CR_SRC_DIR}/ &&
-	cp -v other/fix_wayland_scale_crash.patch ${CR_SRC_DIR}/ &&
-	cp -v other/fix_drag_and_drop_on_wayland.patch ${CR_SRC_DIR}/ &&
-	cp -v other/fix_touch_emulator_double_tap_zoom.patch ${CR_SRC_DIR}/ &&
-	cp -v other/fix_setting_popover_invoker_crash.patch ${CR_SRC_DIR}/ &&
+	# cp -v other/partalloc.patch ${CR_SRC_DIR}/ &&
+	# cp -v other/fix_profile_selector_crash.patch ${CR_SRC_DIR}/ &&
+	# cp -v other/fix_getupdatesprocessor_crash.patch ${CR_SRC_DIR}/ &&
+	# cp -v other/fix_absl_undefined_symbol.patch ${CR_SRC_DIR}/ &&
+	# cp -v other/fix_file_dialog_crash.patch ${CR_SRC_DIR}/ &&
+	# cp -v other/fix_wayland_scale_crash.patch ${CR_SRC_DIR}/ &&
+	# cp -v other/fix_drag_and_drop_on_wayland.patch ${CR_SRC_DIR}/ &&
+	# cp -v other/fix_touch_emulator_double_tap_zoom.patch ${CR_SRC_DIR}/ &&
+	# cp -v other/fix_setting_popover_invoker_crash.patch ${CR_SRC_DIR}/ &&
+	
 	# Starting with M145, the following patch can be removed
 	cp -v other/fix_dangling_pointer_tooltip.patch ${CR_SRC_DIR}/ &&
+	
 	# The following patch could not be fixed upstream because it
 	# is related to our custom flags
 	cp -v other/fix_disable_aero_crash.patch ${CR_SRC_DIR}/ &&
+	
+	cp -v other/allow_manifest_v2_extensions.patch ${CR_SRC_DIR}/ &&
+	
+	# Starting with M149, the following patch can be removed
+	cp -v other/fix_deb_dependency_generation.patch ${CR_SRC_DIR}/ &&
+	
+	cp -v other/android-disable-signin-without-account-manager.patch ${CR_SRC_DIR}/ &&
+	cp -v other/android-extensions-support.patch ${CR_SRC_DIR}/ &&
+	cp -v other/chrome-web-store-protection.patch ${CR_SRC_DIR}/ &&
+	cp -v other/enable-extension-in-incognito.patch ${CR_SRC_DIR}/ &&
 
 	printf "\n" &&
 	printf "${YEL}Patching FFMPEG for HEVC...${c0}\n" &&
 	cd ${CR_SRC_DIR}/third_party/ffmpeg &&
 	git apply --reject ./add-hevc-ffmpeg-decoder-parser.patch &&
-  printf "${YEL}libavcodec header patch for HEVC...${c0}\n" &&
+    printf "${YEL}libavcodec header patch for HEVC...${c0}\n" &&
 	git apply --reject ./change-libavcodec-header.patch &&
+	printf "${YEL}Fix FFMPEG Android x86 HEVC NASM disable patch...${c0}\n" &&
+	git apply --reject ./fix-ffmpeg-android-x86-disable-hevc-nasm.patch &&
 
 	printf "\n" &&
 	printf "${YEL}Patching policy templates...${c0}\n" &&
@@ -153,39 +171,56 @@ patchThor () {
 	cd ${CR_SRC_DIR} &&
 	git apply --reject ./mini_installer.patch &&
 
-    printf "${YEL}Patching Multi language translate...${c0}\n" &&
-	cd ${CR_SRC_DIR} &&
-    git apply --reject ./multi-language-translate.patch &&
+    # gz83: Temporarily skip i18n patch.
+    # printf "${YEL}Patching Multi language translate...${c0}\n" &&
+	# cd ${CR_SRC_DIR} &&
+    # git apply --reject ./multi-language-translate.patch &&
 
 	printf "\n" &&
 	printf "${YEL}Applying other Misc. patches...${c0}\n" &&
 	cd ${CR_SRC_DIR} &&
 	printf "${YEL}Open in same tab patch...${c0}\n" &&
 	git apply --reject ./open_in_same_tab.patch &&
+	printf "${YEL}Allow Manifest V2 extensions...${c0}\n" &&
+	git apply --reject ./allow_manifest_v2_extensions.patch &&
 	printf "${YEL}Thorium WebUI patch...${c0}\n" &&
 	git apply --reject ./thorium_webui.patch &&
+	printf "${YEL}Thorium debug log name patch...${c0}\n" &&
+	git apply --reject ./thorium-debug-log-name.patch &&
+	printf "${YEL}Disable AI entrypoints by default patch...${c0}\n" &&
+	git apply --reject ./disable-ai-entrypoints-by-default.patch &&
 	printf "${YEL}Thorium Updater patch...${c0}\n" &&
 	git apply --reject ./win_updater.patch &&
 	printf "${YEL}Thorium Keyboard Shortcuts patch...${c0}\n" &&
 	git apply --reject ./keyboard_shortcuts.patch &&
 	printf "${YEL}Disable Privacy Sandbox patch...${c0}\n" &&
 	git apply --reject ./disable-privacy-sandbox.patch &&
-	printf "${YEL}Partalloc fix...${c0}\n" &&
-	git apply --reject ./partalloc.patch &&
-	printf "${YEL}Absl undefined symbol fix...${c0}\n" &&
-	git apply --reject ./fix_absl_undefined_symbol.patch &&
+	# printf "${YEL}Partalloc fix...${c0}\n" &&
+	# git apply --reject ./partalloc.patch &&
+	# printf "${YEL}Absl undefined symbol fix...${c0}\n" &&
+	# git apply --reject ./fix_absl_undefined_symbol.patch &&
 	printf "${YEL}Some crashes fixes...${c0}\n" &&
-	git apply --reject ./fix_profile_selector_crash.patch &&
-	git apply --reject ./fix_getupdatesprocessor_crash.patch &&
+	# git apply --reject ./fix_profile_selector_crash.patch &&
+	# git apply --reject ./fix_getupdatesprocessor_crash.patch &&
 	git apply --reject ./fix_dangling_pointer_tooltip.patch &&
 	git apply --reject ./fix_disable_aero_crash.patch &&
-	git apply --reject ./fix_file_dialog_crash.patch &&
-	git apply --reject ./fix_wayland_scale_crash.patch &&
-	git apply --reject ./fix_setting_popover_invoker_crash.patch &&
-	printf "${YEL}Fix Drag and Drop on wayland...${c0}\n" &&
-	git apply --reject ./fix_drag_and_drop_on_wayland.patch &&
-	printf "${YEL}Fix Touch Emulator Double Tap Zoom...${c0}\n" &&
-	git apply --reject ./fix_touch_emulator_double_tap_zoom.patch
+	printf "${YEL}Fix deb dependency generation...${c0}\n" &&
+	git apply --reject ./fix_deb_dependency_generation.patch &&
+    printf "${YEL}Disable signin without account manager...${c0}\n" &&
+	git apply --reject ./android-disable-signin-without-account-manager.patch &&
+	printf "${YEL}Android extensions support patch...${c0}\n" &&
+	git apply --reject ./android-extensions-support.patch &&
+	printf "${YEL}Chrome Web Store protection patch...${c0}\n" &&
+	git apply --reject ./chrome-web-store-protection.patch &&
+	printf "${YEL}Enable extension in incognito patch...${c0}\n" &&
+	git apply --reject ./enable-extension-in-incognito.patch
+	# git apply --reject ./fix_file_dialog_crash.patch &&
+	# git apply --reject ./fix_wayland_scale_crash.patch &&
+	# git apply --reject ./fix_setting_popover_invoker_crash.patch &&
+	# printf "${YEL}Fix Drag and Drop on wayland...${c0}\n" &&
+	# git apply --reject ./fix_drag_and_drop_on_wayland.patch &&
+	# printf "${YEL}Fix Touch Emulator Double Tap Zoom...${c0}\n" &&
+	# git apply --reject ./fix_touch_emulator_double_tap_zoom.patch
 }
 [ -f ${CR_SRC_DIR}/fix-policy-templates.patch ] || patchThor;
 
@@ -247,7 +282,7 @@ esac
 copyRaspi () {
 	printf "\n" &&
 	printf "${YEL}Copying Raspberry Pi build files...${c0}\n" &&
-	cp -r -v arm/build/* ${CR_SRC_DIR}/build/ &&
+	# cp -r -v arm/build/* ${CR_SRC_DIR}/build/ &&
 	cp -r -v arm/third_party/* ${CR_SRC_DIR}/third_party/ &&
 	cp -r -v arm/raspi/* ${CR_SRC_DIR}/ &&
 	cp -v arm/thorium_version.txt ${CR_SRC_DIR}/ui/webui/resources/text/ &&
@@ -271,7 +306,7 @@ esac
 copyWOA () {
 	printf "\n" &&
 	printf "${YEL}Copying Windows on ARM build files...${c0}\n" &&
-	cp -r -v arm/build/* ${CR_SRC_DIR}/build/ &&
+	# cp -r -v arm/build/* ${CR_SRC_DIR}/build/ &&
 	cp -v arm/thorium_version.txt ${CR_SRC_DIR}/ui/webui/resources/text/ &&
 	cp -r -v arm/third_party/* ${CR_SRC_DIR}/third_party/ &&
 	cd ${CR_SRC_DIR} &&
@@ -368,7 +403,7 @@ esac
 copyAndroid () {
 	printf "\n" &&
 	printf "${YEL}Copying Android (ARM64 and ARM32) build files...${c0}\n" &&
-	cp -r -v arm/build/* ${CR_SRC_DIR}/build/ &&
+	# cp -r -v arm/build/* ${CR_SRC_DIR}/build/ &&
 	cp -r -v arm/third_party/* ${CR_SRC_DIR}/third_party/ &&
 	printf "\n" &&
 	cp -r -v arm/android/* ${CR_SRC_DIR}/ &&
@@ -391,7 +426,7 @@ copyAndroid () {
 	printf "\n" &&
 	printf "${YEL}Downloading PGO profiles...${c0}\n" &&
 	cd ${CR_SRC_DIR} &&
-	python3 tools/update_pgo_profiles.py --target=android-arm64 update --gs-url-base=chromium-optimization-profiles/pgo_profiles &&
+	# python3 tools/update_pgo_profiles.py --target=android-desktop-arm64 update --gs-url-base=chromium-optimization-profiles/pgo_profiles &&
 	python3 tools/update_pgo_profiles.py --target=android-arm32 update --gs-url-base=chromium-optimization-profiles/pgo_profiles &&
 	cd ~/thorium &&
 	printf "\n"

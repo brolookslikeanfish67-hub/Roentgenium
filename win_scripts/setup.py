@@ -141,22 +141,31 @@ patches = [
     "other/mini_installer.patch",
     "other/open_in_same_tab.patch",
     "other/thorium_webui.patch",
+    "other/thorium-debug-log-name.patch",
+    "other/disable-ai-entrypoints-by-default.patch",
     "other/disable-privacy-sandbox.patch",
     "other/win_updater.patch",
     "other/keyboard_shortcuts.patch",
-    "other/partalloc.patch",
-    "other/multi-language-translate.patch",
-    "other/fix_profile_selector_crash.patch",
-    "other/fix_getupdatesprocessor_crash.patch",
+    # "other/partalloc.patch",
+    # gz83: Temporarily skip i18n patch.
+    # "other/multi-language-translate.patch",
+    # "other/fix_profile_selector_crash.patch",
+    # "other/fix_getupdatesprocessor_crash.patch",
     "other/fix_dangling_pointer_tooltip.patch",
     "other/fix_disable_aero_crash.patch",
-    "other/fix_file_dialog_crash.patch",
-    "other/fix_wayland_scale_crash.patch",
+    # "other/fix_file_dialog_crash.patch",
+    # "other/fix_wayland_scale_crash.patch",
     "other/restore_download_shelf.patch",
-    "other/fix_absl_undefined_symbol.patch",
-    "other/fix_drag_and_drop_on_wayland.patch",
-    "other/fix_touch_emulator_double_tap_zoom.patch",
-    "other/fix_setting_popover_invoker_crash.patch",
+    # "other/fix_absl_undefined_symbol.patch",
+    # "other/fix_drag_and_drop_on_wayland.patch",
+    # "other/fix_touch_emulator_double_tap_zoom.patch",
+    # "other/fix_setting_popover_invoker_crash.patch",
+    "other/allow_manifest_v2_extensions.patch",
+    "other/fix_deb_dependency_generation.patch",
+    "other/android-disable-signin-without-account-manager.patch",
+    "other/android-extensions-support.patch",
+    "other/chrome-web-store-protection.patch",
+    "other/enable-extension-in-incognito.patch",
 ]
 for patch in patches:
     relative_path = patch.replace("other/", "", 1)
@@ -181,11 +190,18 @@ copy(
     ),
     os.path.normpath(os.path.join(cr_src_dir, "third_party", "ffmpeg")),
 )
+copy(
+    os.path.normpath(
+        os.path.join(thor_src_dir, "other", "fix-ffmpeg-android-x86-disable-hevc-nasm.patch")
+    ),
+    os.path.normpath(os.path.join(cr_src_dir, "third_party", "ffmpeg")),
+)
 # Change directory to ffmpeg_dir and run commands
 ffmpeg_dir = os.path.join(cr_src_dir, "third_party", "ffmpeg")
 os.chdir(ffmpeg_dir)
 try_run(f"git apply --reject add-hevc-ffmpeg-decoder-parser.patch")
 try_run(f"git apply --reject change-libavcodec-header.patch")
+try_run(f"git apply --reject fix-ffmpeg-android-x86-disable-hevc-nasm.patch")
 
 
 print("\nPatching policy templates\n")
@@ -212,48 +228,63 @@ os.chdir(cr_src_dir)
 try_run(f"git apply --reject thorium-2024-ui.patch")
 
 
-print("\nPatching for mini_installer\n")
-# Change directory to cr_src_dir and run commands
-os.chdir(cr_src_dir)
-try_run(f"git apply --reject mini_installer.patch")
-
-
-print("\nPatching Multi language translate...\n")
-# Change directory to cr_src_dir and run commands
-os.chdir(cr_src_dir)
-try_run(f"git apply --reject multi-language-translate.patch")
-
-
 print("\nDownload Shelf patch...\n")
 # Change directory to cr_src_dir and run commands
 os.chdir(cr_src_dir)
 try_run(f"git apply --reject restore_download_shelf.patch")
 
 
+print("\nPatching for mini_installer\n")
+# Change directory to cr_src_dir and run commands
+os.chdir(cr_src_dir)
+try_run(f"git apply --reject mini_installer.patch")
+
+# gz83: Temporarily skip i18n patch.
+# print("\nPatching Multi language translate...\n")
+# # Change directory to cr_src_dir and run commands
+# os.chdir(cr_src_dir)
+# try_run(f"git apply --reject multi-language-translate.patch")
+
+
 print("\nApplying other Misc. patches...\n")
 # Change directory to cr_src_dir and run commands
 os.chdir(cr_src_dir)
 try_run(f"git apply --reject open_in_same_tab.patch")
+try_run(f"git apply --reject allow_manifest_v2_extensions.patch")
 try_run(f"git apply --reject thorium_webui.patch")
+try_run(f"git apply --reject thorium-debug-log-name.patch")
+try_run(f"git apply --reject disable-ai-entrypoints-by-default.patch")
 try_run(f"git apply --reject win_updater.patch")
-try_run(f"git apply --reject disable-privacy-sandbox.patch")
 try_run(f"git apply --reject keyboard_shortcuts.patch")
-try_run(f"git apply --reject fix_touch_emulator_double_tap_zoom.patch")
+try_run(f"git apply --reject disable-privacy-sandbox.patch")
+# try_run(f"git apply --reject fix_touch_emulator_double_tap_zoom.patch")
 
 
-print("\nApplying performance and crash fixes patches...\n")
+print("\nApplying deb dependency generation and crash fixes patches...\n")
 # Change directory to cr_src_dir and run commands
 os.chdir(cr_src_dir)
-try_run(f"git apply --reject fix_absl_undefined_symbol.patch")
-try_run(f"git apply --reject fix_drag_and_drop_on_wayland.patch")
-try_run(f"git apply --reject partalloc.patch")
-try_run(f"git apply --reject fix_profile_selector_crash.patch")
-try_run(f"git apply --reject fix_getupdatesprocessor_crash.patch")
+# try_run(f"git apply --reject fix_absl_undefined_symbol.patch")
+# try_run(f"git apply --reject fix_drag_and_drop_on_wayland.patch")
+# try_run(f"git apply --reject partalloc.patch")
+# try_run(f"git apply --reject fix_profile_selector_crash.patch")
+# try_run(f"git apply --reject fix_getupdatesprocessor_crash.patch")
 try_run(f"git apply --reject fix_dangling_pointer_tooltip.patch")
 try_run(f"git apply --reject fix_disable_aero_crash.patch")
-try_run(f"git apply --reject fix_file_dialog_crash.patch")
-try_run(f"git apply --reject fix_wayland_scale_crash.patch")
-try_run(f"git apply --reject fix_setting_popover_invoker_crash.patch")
+try_run(f"git apply --reject fix_deb_dependency_generation.patch")
+try_run(f"git apply --reject android-disable-signin-without-account-manager.patch")
+
+
+print("\nApplying extension support and protection patches...\n")
+# Change directory to cr_src_dir and run commands
+os.chdir(cr_src_dir)
+try_run(f"git apply --reject android-extensions-support.patch")
+try_run(f"git apply --reject chrome-web-store-protection.patch")
+try_run(f"git apply --reject enable-extension-in-incognito.patch")
+
+
+# try_run(f"git apply --reject fix_file_dialog_crash.patch")
+# try_run(f"git apply --reject fix_wayland_scale_crash.patch")
+# try_run(f"git apply --reject fix_setting_popover_invoker_crash.patch")
 
 
 print("\nCopying other files to out/thorium\n")
@@ -296,10 +327,6 @@ else:
 # Copy Windows on Arm files
 def copy_woa():
     print("\nCopying Windows on Arm build files\n")
-    copy_directory(
-        os.path.normpath(os.path.join(thor_src_dir, "arm", "build")),
-        os.path.normpath(os.path.join(cr_src_dir, "build")),
-    )
     copy_directory(
         os.path.normpath(os.path.join(thor_src_dir, "arm", "third_party")),
         os.path.normpath(os.path.join(cr_src_dir, "third_party")),

@@ -267,4 +267,17 @@ The Thorium .desktop file and content-shell .desktop file have flags added for e
 Remove discovery module from NTP on Android
   - Made by @gz83.
 
+Allow Manifest V2 extensions patch
+  - https://github.com/ungoogled-software/ungoogled-chromium/blob/master/patches/core/ungoogled-chromium/extensions-manifestv2.patch
+
+Android Extensions Support patch
+  - https://github.com/uazo/cromite/blob/master/build/patches/Experimental-support-for-extensions-on-Android.patch
+
+Chrome Web Store Protection patch
+  - https://github.com/uazo/cromite/blob/master/build/patches/Chrome-web-store-protection.patch
+
+Enable extensions in incognito patch
+  - https://github.com/uazo/cromite/blob/master/build/patches/Enable-extension-in-incognito.patch
+
+
 - Any other code/patches are written from scratch by me.
