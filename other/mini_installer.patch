@@ -1,5 +1,5 @@
 diff --git a/chrome/installer/mini_installer/BUILD.gn b/chrome/installer/mini_installer/BUILD.gn
-index 5f9acdb7f3550..c492fa4e569b6 100644
+index 5f9acdb..c492fa4 100644
 --- a/chrome/installer/mini_installer/BUILD.gn
 +++ b/chrome/installer/mini_installer/BUILD.gn
 @@ -1,7 +1,8 @@
@@ -221,19 +221,20 @@ index 5f9acdb7f3550..c492fa4e569b6 100644
      ]
    }
 diff --git a/chrome/installer/mini_installer/configuration.cc b/chrome/installer/mini_installer/configuration.cc
-index f247568ff0331..73d4607f5a4c2 100644
+index f247568..10b43fd 100644
 --- a/chrome/installer/mini_installer/configuration.cc
 +++ b/chrome/installer/mini_installer/configuration.cc
-@@ -64,6 +64,8 @@ void Configuration::Clear() {
+@@ -64,6 +64,9 @@ void Configuration::Clear() {
    command_line_ = nullptr;
    argument_count_ = 0;
    is_system_level_ = false;
 +  is_silent_install_ = false;
++  should_not_launch_chrome_ = false;
 +  enable_logging_ = false;
    has_invalid_switch_ = false;
    should_delete_extracted_files_ = true;
  }
-@@ -78,20 +80,27 @@ bool Configuration::ParseCommandLine(const wchar_t* command_line) {
+@@ -78,20 +81,29 @@ bool Configuration::ParseCommandLine(const wchar_t* command_line) {
      return false;
  
    for (int i = 1; i < argument_count_; ++i) {
@@ -242,6 +243,8 @@ index f247568ff0331..73d4607f5a4c2 100644
        is_system_level_ = true;
 +    } else if (0 == ::lstrcmpi(args_[i], L"--silent")) {
 +      is_silent_install_ = true;
++    } else if (0 == ::lstrcmpi(args_[i], L"--do-not-launch-chrome")) {
++      should_not_launch_chrome_ = true;
 +    } else if (0 == ::lstrcmpi(args_[i], L"--debug")) {
 +      enable_logging_ = true;
  #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
@@ -269,15 +272,18 @@ index f247568ff0331..73d4607f5a4c2 100644
  
    if (!is_system_level_)
 diff --git a/chrome/installer/mini_installer/configuration.h b/chrome/installer/mini_installer/configuration.h
-index e2b6155fe43fc..08b937f7793e6 100644
+index e2b6155..549e9c0 100644
 --- a/chrome/installer/mini_installer/configuration.h
 +++ b/chrome/installer/mini_installer/configuration.h
-@@ -36,9 +36,15 @@ class Configuration {
+@@ -36,9 +36,18 @@ class Configuration {
    // GoogleUpdateIsMachine=1 is set in the process's environment.
    bool is_system_level() const { return is_system_level_; }
  
 +  // Returns true if --silent is on the command line.
 +  bool is_silent_install() const { return is_silent_install_; }
++
++  // Returns true if --do-not-launch-chrome is on the command line.
++  bool should_not_launch_chrome() const { return should_not_launch_chrome_; }
 +
    // Returns true if any invalid switch is found on the command line.
    bool has_invalid_switch() const { return has_invalid_switch_; }
@@ -288,17 +294,18 @@ index e2b6155fe43fc..08b937f7793e6 100644
    // Returns true if extracted files should be deleted prior to exit.
    bool should_delete_extracted_files() const {
      return should_delete_extracted_files_;
-@@ -54,6 +60,8 @@ class Configuration {
+@@ -54,6 +63,9 @@ class Configuration {
    const wchar_t* command_line_;
    int argument_count_;
    bool is_system_level_;
 +  bool is_silent_install_;
++  bool should_not_launch_chrome_;
 +  bool enable_logging_;
    bool has_invalid_switch_;
    bool should_delete_extracted_files_;
  
 diff --git a/chrome/installer/mini_installer/mini_installer.cc b/chrome/installer/mini_installer/mini_installer.cc
-index 44f29f2fafda8..e774edf86da7b 100644
+index 44f29f2..35ae16d 100644
 --- a/chrome/installer/mini_installer/mini_installer.cc
 +++ b/chrome/installer/mini_installer/mini_installer.cc
 @@ -1,4 +1,4 @@
@@ -325,7 +332,7 @@ index 44f29f2fafda8..e774edf86da7b 100644
  
  #include "build/branding_buildflags.h"
  #include "chrome/installer/mini_installer/appid.h"
-@@ -53,11 +57,54 @@
+@@ -53,11 +57,64 @@
  #include "chrome/installer/mini_installer/memory_range.h"
  #include "chrome/installer/mini_installer/mini_file.h"
  #include "chrome/installer/mini_installer/mini_installer_constants.h"
@@ -343,6 +350,16 @@ index 44f29f2fafda8..e774edf86da7b 100644
 +unsigned int current_height;
 +
 +bool should_install_ = false;
++
++// True when this is a fresh (first) install for which the browser should be
++// launched once the user dismisses the success dialog. Set before setup.exe
++// runs; only ever true for non-silent, user-level installs.
++bool should_launch_browser_ = false;
++
++// The button that ended the task dialog, as reported by TaskDialogIndirect.
++// IDOK can only come from the success page (the first page has Yes/No/Cancel
++// and the failure page only has Close).
++int pressed_button_ = 0;
 +
 +// Dialog strings
 +static constexpr wchar_t kInstallingActiveMessage[] = L"Installing...";
@@ -380,7 +397,22 @@ index 44f29f2fafda8..e774edf86da7b 100644
  // Deletes |path|, updating |max_delete_attempts| if more attempts were taken
  // than indicated in |max_delete_attempts|.
  void DeleteWithRetryAndMetrics(const wchar_t* path, int& max_delete_attempts) {
-@@ -709,21 +756,236 @@ bool GetWorkDir(HMODULE module,
+@@ -499,6 +556,14 @@ ProcessExitResult RunSetup(const Configuration& configuration,
+   // on to setup.exe
+   AppendCommandLineFlags(configuration.command_line(), &cmd_line);
+ 
++  // When the browser will be launched after the user dismisses the success
++  // dialog, tell setup.exe not to launch it after a fresh install so it does
++  // not obscure the dialog.
++  if (GetShouldLaunchBrowser() &&
++      !cmd_line.append(L" --do-not-launch-chrome")) {
++    return ProcessExitResult(COMMAND_STRING_OVERFLOW);
++  }
++
+   return RunProcessAndWait(setup_exe.get(), cmd_line.get(),
+                            RUN_SETUP_FAILED_FILE_NOT_FOUND,
+                            RUN_SETUP_FAILED_PATH_NOT_FOUND,
+@@ -709,21 +774,312 @@ bool GetWorkDir(HMODULE module,
           CreateWorkDir(base_path.get(), work_dir, exit_code);
  }
  
@@ -392,6 +424,61 @@ index 44f29f2fafda8..e774edf86da7b 100644
 +
 +bool GetShouldInstall() {
 +  return should_install_;
++}
++
++bool GetShouldLaunchBrowser() {
++  return should_launch_browser_;
++}
++
++// Reads the browser's install directory from the Add/Remove Programs registry
++// entry written by setup.exe. Returns true if a non-empty location was read
++// into |location|.
++bool GetInstallLocation(const Configuration& configuration,
++                        PathString* location) {
++  const HKEY root_key =
++      configuration.is_system_level() ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER;
++  RegKey key;
++  if (key.Open(root_key, kUninstallRegistryKey,
++               KEY_QUERY_VALUE | KEY_WOW64_32KEY) != ERROR_SUCCESS) {
++    return false;
++  }
++  return key.ReadSZValue(L"InstallLocation", location->get(),
++                         location->capacity()) == ERROR_SUCCESS &&
++         !location->empty();
++}
++
++// Launches the browser from its installed location. Used after a successful
++// fresh install once the user has dismissed the success dialog; setup.exe's
++// own post-install launch is suppressed with --do-not-launch-chrome so that
++// the browser does not appear on top of the installer.
++bool LaunchInstalledBrowser(const Configuration& configuration) {
++  PathString exe_path;
++  if (!GetInstallLocation(configuration, &exe_path)) {
++    std::wcerr << L"Could not read the browser's install location" << std::endl;
++    return false;
++  }
++  if (!exe_path.append(L"\\") || !exe_path.append(kBrowserExe)) {
++    return false;
++  }
++
++  // Same command line as setup.exe's GetPostInstallLaunchCommand().
++  CommandString cmd_line;
++  if (!cmd_line.assign(L"\"") || !cmd_line.append(exe_path.get()) ||
++      !cmd_line.append(L"\" --from-installer")) {
++    return false;
++  }
++
++  std::wcout << L"Launching " << cmd_line.get() << std::endl;
++  STARTUPINFOW startup_info = {sizeof(startup_info)};
++  PROCESS_INFORMATION process_info = {0};
++  if (!::CreateProcess(exe_path.get(), cmd_line.get(), nullptr, nullptr, FALSE,
++                       0, nullptr, nullptr, &startup_info, &process_info)) {
++    std::wcerr << L"Failed to launch " << exe_path.get() << std::endl;
++    return false;
++  }
++  ::CloseHandle(process_info.hThread);
++  ::CloseHandle(process_info.hProcess);
++  return true;
 +}
 +
 +DWORD WINAPI InstallThreadProc(LPVOID lpParam) {
@@ -492,8 +579,12 @@ index 44f29f2fafda8..e774edf86da7b 100644
 +  config.pfCallback = TaskDialogCallbackProc;
 +  config.cxWidth = 0;
 +
-+  // Create the main window
-+  HRESULT kTaskDlgIndir = TaskDialogIndirect(&config, nullptr, nullptr, nullptr);
++  // Create the main window. Note that TDM_NAVIGATE_PAGE replaces the whole
++  // config (including pfCallback, which the navigated pages do not set), so
++  // the button that ends the dialog is captured here rather than in the
++  // callback.
++  HRESULT kTaskDlgIndir =
++      TaskDialogIndirect(&config, &pressed_button_, nullptr, nullptr);
 +  success = static_cast<bool>(kTaskDlgIndir == S_OK);
 +  return success;
 +}
@@ -602,6 +693,17 @@ index 44f29f2fafda8..e774edf86da7b 100644
 +      std::wcout << L"Running silent install" << std::endl;
 +      return WMainImpl(true, hModule, conf);
 +    } else {
++        // Decide now, before setup.exe runs, whether the browser should be
++        // launched when the user dismisses the success dialog: only for a
++        // fresh (not yet installed), user-level install, and only if the
++        // user did not pass --do-not-launch-chrome. setup.exe is told not
++        // to launch the browser itself (see RunSetup) so that it does not
++        // pop up on top of this dialog.
++        PathString existing_install;
++        if (!conf.is_system_level() && !conf.should_not_launch_chrome() &&
++            !GetInstallLocation(conf, &existing_install)) {
++          should_launch_browser_ = true;
++        }
 +        ProcessExitResult wnd_status = ProcessExitResult(SUCCESS_EXIT_CODE);
 +        if (!InitWndInstance(hInstance, nCmdShow)) {
 +          // Replace with GetError
@@ -610,6 +712,12 @@ index 44f29f2fafda8..e774edf86da7b 100644
 +        }
 +        if (!GetShouldInstall()) {
 +          std::wcerr << L"Not installing, user declined" << std::endl;
++        }
++        // The installer window is gone now. Launch the browser if this was a
++        // fresh install and the user acknowledged the success page with OK
++        // (the failure page's only button is Close).
++        if (GetShouldLaunchBrowser() && pressed_button_ == IDOK) {
++          LaunchInstalledBrowser(conf);
 +        }
 +        return wnd_status;
 +    }
@@ -622,7 +730,7 @@ index 44f29f2fafda8..e774edf86da7b 100644
    // First get a path where we can extract payload
    PathString base_path;
    if (!GetWorkDir(module, &base_path, &exit_code)) {
-@@ -771,4 +1033,11 @@ ProcessExitResult WMain(HMODULE module) {
+@@ -771,4 +1127,11 @@ ProcessExitResult WMain(HMODULE module) {
    return exit_code;
  }
  
@@ -635,10 +743,10 @@ index 44f29f2fafda8..e774edf86da7b 100644
 +
  }  // namespace mini_installer
 diff --git a/chrome/installer/mini_installer/mini_installer.h b/chrome/installer/mini_installer/mini_installer.h
-index 0bce93936fdfe..fd53935bd9ee3 100644
+index 0bce939..11cb890 100644
 --- a/chrome/installer/mini_installer/mini_installer.h
 +++ b/chrome/installer/mini_installer/mini_installer.h
-@@ -6,13 +6,28 @@
+@@ -6,13 +6,30 @@
  #define CHROME_INSTALLER_MINI_INSTALLER_MINI_INSTALLER_H_
  
  #include <windows.h>
@@ -663,17 +771,33 @@ index 0bce93936fdfe..fd53935bd9ee3 100644
 +extern unsigned int current_height;
 +
 +extern bool should_install_;
++extern bool should_launch_browser_;
++extern int pressed_button_;
 +
  class Configuration;
  
  // A container of a process exit code (eventually passed to ExitProcess) and
-@@ -76,11 +91,23 @@ ProcessExitResult UnpackBinaryResources(HMODULE module,
+@@ -76,11 +93,37 @@ ProcessExitResult UnpackBinaryResources(HMODULE module,
                                          ResourceTypeString& archive_type,
                                          int& max_delete_attempts);
  
 +void SetShouldInstall();
 +
 +bool GetShouldInstall();
++
++// Returns true when the browser should be launched after the user dismisses
++// the success dialog (fresh, user-level, non-silent install).
++bool GetShouldLaunchBrowser();
++
++// Reads the browser's install directory (as written by setup.exe in the
++// Add/Remove Programs registry entry) into |location|. Returns false if the
++// product is not installed.
++bool GetInstallLocation(const Configuration& configuration,
++                        PathString* location);
++
++// Launches the installed browser with --from-installer, mirroring setup.exe's
++// post-install launch. Returns false if the browser could not be launched.
++bool LaunchInstalledBrowser(const Configuration& configuration);
 +
 +HRESULT CALLBACK TaskDialogCallbackProc(HWND hwnd, UINT uNotification, WPARAM wParam, LPARAM lParam, LONG_PTR lpRefData);
 +
@@ -693,7 +817,7 @@ index 0bce93936fdfe..fd53935bd9ee3 100644
  }  // namespace mini_installer
  
 diff --git a/chrome/installer/mini_installer/mini_installer.rc b/chrome/installer/mini_installer/mini_installer.rc
-index fff6a53c69130..0c1530fb3eded 100644
+index fff6a53..0c1530f 100644
 --- a/chrome/installer/mini_installer/mini_installer.rc
 +++ b/chrome/installer/mini_installer/mini_installer.rc
 @@ -30,6 +30,8 @@ LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
@@ -706,7 +830,7 @@ index fff6a53c69130..0c1530fb3eded 100644
  #ifdef APSTUDIO_INVOKED
  /////////////////////////////////////////////////////////////////////////////
 diff --git a/chrome/installer/mini_installer/mini_installer_constants.cc b/chrome/installer/mini_installer/mini_installer_constants.cc
-index c2a03ccbb6460..e2e8a628e5eb1 100644
+index c2a03cc..ff2dc60 100644
 --- a/chrome/installer/mini_installer/mini_installer_constants.cc
 +++ b/chrome/installer/mini_installer/mini_installer_constants.cc
 @@ -1,4 +1,4 @@
@@ -715,7 +839,16 @@ index c2a03ccbb6460..e2e8a628e5eb1 100644
  // Use of this source code is governed by a BSD-style license that can be
  // found in the LICENSE file.
  
-@@ -21,7 +21,7 @@ const wchar_t kCmdInstallArchive[] = L"install-archive";
+@@ -11,6 +11,8 @@ namespace mini_installer {
+ // Various filenames and prefixes.
+ // The target name of the installer extracted from resources.
+ const wchar_t kSetupExe[] = L"setup.exe";
++// The name of the browser executable, for launching it after a fresh install.
++const wchar_t kBrowserExe[] = L"thorium.exe";
+ // The prefix of the chrome archive resource.
+ const wchar_t kChromeArchivePrefix[] = L"chrome";
+ // The prefix of the installer resource.
+@@ -21,7 +23,7 @@ const wchar_t kCmdInstallArchive[] = L"install-archive";
  const wchar_t kCmdUncompressedArchive[] = L"uncompressed-archive";
  
  // Temp directory prefix that this process creates.
@@ -724,7 +857,7 @@ index c2a03ccbb6460..e2e8a628e5eb1 100644
  
  // The resource types that would be unpacked from the mini installer.
  // Uncompressed binary.
-@@ -67,12 +67,12 @@ const wchar_t kCleanupRegistryKey[] = L"Software\\Chrome for Testing";
+@@ -67,12 +69,17 @@ const wchar_t kCleanupRegistryKey[] = L"Software\\Chrome for Testing";
  #else
  // The path to the key containing each app's Clients registry key.
  // No trailing slash on this one because the app's GUID is not appended.
@@ -739,12 +872,17 @@ index c2a03ccbb6460..e2e8a628e5eb1 100644
 +const wchar_t kCleanupRegistryKey[] = L"Software\\Thorium";
  #endif
  
++// The Add/Remove Programs registry entry written by setup.exe; its
++// "InstallLocation" value holds the browser's install directory.
++const wchar_t kUninstallRegistryKey[] =
++    L"Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Thorium";
++
  }  // namespace mini_installer
 diff --git a/chrome/installer/mini_installer/mini_installer_constants.h b/chrome/installer/mini_installer/mini_installer_constants.h
-index 23de845654342..71dfb9bbaced8 100644
+index 23de845..fbb25b3 100644
 --- a/chrome/installer/mini_installer/mini_installer_constants.h
 +++ b/chrome/installer/mini_installer/mini_installer_constants.h
-@@ -5,8 +5,14 @@
+@@ -5,10 +5,17 @@
  #ifndef CHROME_INSTALLER_MINI_INSTALLER_MINI_INSTALLER_CONSTANTS_H_
  #define CHROME_INSTALLER_MINI_INSTALLER_MINI_INSTALLER_CONSTANTS_H_
  
@@ -758,9 +896,20 @@ index 23de845654342..71dfb9bbaced8 100644
 +
  // Various filenames and prefixes.
  extern const wchar_t kSetupExe[];
++extern const wchar_t kBrowserExe[];
  extern const wchar_t kChromeArchivePrefix[];
+ extern const wchar_t kSetupPrefix[];
+ 
+@@ -44,6 +51,7 @@ extern const wchar_t kUninstallRegistryValue[];
+ extern const wchar_t kClientsKeyBase[];
+ extern const wchar_t kClientStateKeyBase[];
+ extern const wchar_t kCleanupRegistryKey[];
++extern const wchar_t kUninstallRegistryKey[];
+ 
+ }  // namespace mini_installer
+ 
 diff --git a/chrome/installer/mini_installer/mini_installer_exe_main.cc b/chrome/installer/mini_installer/mini_installer_exe_main.cc
-index aff0370044046..44529bb3b78b8 100644
+index aff0370..44529bb 100644
 --- a/chrome/installer/mini_installer/mini_installer_exe_main.cc
 +++ b/chrome/installer/mini_installer/mini_installer_exe_main.cc
 @@ -1,4 +1,4 @@
@@ -828,7 +977,7 @@ index aff0370044046..44529bb3b78b8 100644
 -#endif
  }  // extern "C"
 diff --git a/chrome/installer/mini_installer/mini_installer_exe_version.rc.version b/chrome/installer/mini_installer/mini_installer_exe_version.rc.version
-index 2862d6b50a550..567c2bb2d6caa 100644
+index 2862d6b..567c2bb 100644
 --- a/chrome/installer/mini_installer/mini_installer_exe_version.rc.version
 +++ b/chrome/installer/mini_installer/mini_installer_exe_version.rc.version
 @@ -27,7 +27,8 @@ BEGIN
@@ -850,7 +999,7 @@ index 2862d6b50a550..567c2bb2d6caa 100644
      END
      BLOCK "VarFileInfo"
 diff --git a/chrome/installer/mini_installer/mini_installer_resource.h b/chrome/installer/mini_installer/mini_installer_resource.h
-index 9155eba56943f..a498f79a58128 100644
+index 9155eba..a498f79 100644
 --- a/chrome/installer/mini_installer/mini_installer_resource.h
 +++ b/chrome/installer/mini_installer/mini_installer_resource.h
 @@ -10,6 +10,19 @@
@@ -875,7 +1024,7 @@ index 9155eba56943f..a498f79a58128 100644
  // The identifier of the RCDATA resource holding the version of Chrome on which
 diff --git a/chrome/installer/mini_installer/mini_installer_version.h.template b/chrome/installer/mini_installer/mini_installer_version.h.template
 new file mode 100644
-index 0000000000000..0930463ef38fc
+index 0000000..0930463
 --- /dev/null
 +++ b/chrome/installer/mini_installer/mini_installer_version.h.template
 @@ -0,0 +1,24 @@
@@ -904,7 +1053,7 @@ index 0000000000000..0930463ef38fc
 +
 +#endif // CHROME_INSTALLER_MINI_INSTALLER_MINI_INSTALLER_VERSION_H_
 diff --git a/chrome/installer/setup/install_worker.cc b/chrome/installer/setup/install_worker.cc
-index 317e77e81c040..7864422d46333 100644
+index 317e77e..bb56327 100644
 --- a/chrome/installer/setup/install_worker.cc
 +++ b/chrome/installer/setup/install_worker.cc
 @@ -1,4 +1,4 @@
@@ -988,19 +1137,24 @@ index 317e77e81c040..7864422d46333 100644
  // Adds Chrome specific install work items to |install_list|.
  void AddChromeWorkItems(const InstallParams& install_params,
                          WorkItemList* install_list) {
-@@ -209,6 +256,11 @@ void AddChromeWorkItems(const InstallParams& install_params,
+@@ -209,6 +256,16 @@ void AddChromeWorkItems(const InstallParams& install_params,
  
    const base::FilePath& target_path = installer_state.target_path();
  
 +  // patch(Hibbiki): Close previous instance on system-install as we are missing
 +  // required GoogleUpdate component to elevate and rename new_chrome.exe on exit.
-+  if (installer_state.system_install())
++  // Also close running instances when over-installing the same version, since
++  // the version directory is then replaced in place (see the ALWAYS_MOVE work
++  // item below), which fails while its files are loaded by a running browser.
++  if (installer_state.system_install() ||
++      (current_version.IsValid() && current_version == new_version)) {
 +    ClosePreviousChromeProcess(target_path);
++  }
 +
    if (current_version.IsValid()) {
      // TODO(crbug.com/441478433): Delete this cleanup some time in 2027.
      // Delete the archive from an existing install to save some disk space.
-@@ -234,6 +286,14 @@ void AddChromeWorkItems(const InstallParams& install_params,
+@@ -234,6 +291,14 @@ void AddChromeWorkItems(const InstallParams& install_params,
                                      temp_path, WorkItem::NEW_NAME_IF_IN_USE,
                                      new_chrome_exe);
  
@@ -1015,7 +1169,31 @@ index 317e77e81c040..7864422d46333 100644
    // Install kVisualElementsManifest if it is present in |src_path|. No need to
    // make this a conditional work item as if the file is not there now, it will
    // never be.
-@@ -272,6 +332,7 @@ void AddChromeWorkItems(const InstallParams& install_params,
+@@ -255,15 +320,17 @@ void AddChromeWorkItems(const InstallParams& install_params,
+   // the permissions of %ProgramFiles% would be picked up.  Now that |temp_path|
+   // is in %ProgramFiles% for system level installs (and in %LOCALAPPDATA%
+   // otherwise), there is no need to do this.
+-  // Note that we pass true for check_duplicates to avoid failing on in-use
+-  // repair runs if the current_version is the same as the new_version.
+-  bool check_for_duplicates =
+-      (current_version.IsValid() && current_version == new_version);
++  // Always move the version directory into place, even when over-installing
++  // the same version. Upstream passes CHECK_DUPLICATES for same-version
++  // repairs, but IsIdenticalFileHierarchy() only compares file sizes in
++  // official builds, so a rebuilt binary with an unchanged size (and the same
++  // version number) would silently be discarded, leaving the old build's
++  // files installed. Running instances are closed above, so replacing the
++  // directory in place is safe.
+   install_list->AddMoveTreeWorkItem(
+       src_path.AppendASCII(new_version.GetString()),
+       target_path.AppendASCII(new_version.GetString()), temp_path,
+-      check_for_duplicates ? WorkItem::CHECK_DUPLICATES
+-                           : WorkItem::ALWAYS_MOVE);
++      WorkItem::ALWAYS_MOVE);
+ 
+   // Delete any old_chrome.exe if present (ignore failure if it's in use).
+   install_list
+@@ -272,6 +339,7 @@ void AddChromeWorkItems(const InstallParams& install_params,
        ->set_best_effort(true);
  }
  
@@ -1023,7 +1201,7 @@ index 317e77e81c040..7864422d46333 100644
  // Adds work items to register the Elevation Service with Windows. Only for
  // system level installs.
  void AddElevationServiceWorkItems(const base::FilePath& elevation_service_path,
-@@ -356,7 +417,6 @@ void AddTracingServiceWorkItems(const InstallationState& original_state,
+@@ -356,7 +424,6 @@ void AddTracingServiceWorkItems(const InstallationState& original_state,
    }
  }
  
@@ -1031,7 +1209,7 @@ index 317e77e81c040..7864422d46333 100644
  // Adds work items to add the "store-dmtoken" command to Chrome's version key.
  // This method is a no-op if this is anything other than system-level Chrome.
  // The command is used when enrolling Chrome browser instances into enterprise
-@@ -980,7 +1040,7 @@ void AddInstallWorkItems(const InstallParams& install_params,
+@@ -980,7 +1047,7 @@ void AddInstallWorkItems(const InstallParams& install_params,
                                      install_list);
    AddPlatformExperienceHelperWorkItems(installer_state, new_version,
                                         install_list);
@@ -1040,7 +1218,7 @@ index 317e77e81c040..7864422d46333 100644
    AddFirewallRulesWorkItems(installer_state, !current_version.IsValid(),
                              install_list);
  
-@@ -990,10 +1050,12 @@ void AddInstallWorkItems(const InstallParams& install_params,
+@@ -990,10 +1057,12 @@ void AddInstallWorkItems(const InstallParams& install_params,
        installer_state.root_key(),
        GetNotificationHelperPath(target_path, new_version), install_list);
  
@@ -1053,7 +1231,7 @@ index 317e77e81c040..7864422d46333 100644
  
    AddUpdateDowngradeVersionItem(installer_state.root_key(), current_version,
                                  new_version, install_list);
-@@ -1273,10 +1335,12 @@ void AddFinalizeUpdateWorkItems(const InstallationState& original_state,
+@@ -1273,10 +1342,12 @@ void AddFinalizeUpdateWorkItems(const InstallationState& original_state,
    AddWerHelperRegistration(installer_state.root_key(),
                             GetWerHelperPath(target_path, new_version), list);
  
@@ -1067,7 +1245,7 @@ index 317e77e81c040..7864422d46333 100644
    const std::wstring client_state_key = install_static::GetClientStateKeyPath();
  
 diff --git a/chrome/installer/setup/installer_state.cc b/chrome/installer/setup/installer_state.cc
-index f1e38c0efc160..7334cb587c48b 100644
+index f1e38c0..7334cb5 100644
 --- a/chrome/installer/setup/installer_state.cc
 +++ b/chrome/installer/setup/installer_state.cc
 @@ -44,14 +44,16 @@ InstallerState::InstallerState()
@@ -1116,7 +1294,7 @@ index f1e38c0efc160..7334cb587c48b 100644
  
  void InstallerState::SetStage(InstallerStage stage) const {
 diff --git a/chrome/installer/setup/installer_state.h b/chrome/installer/setup/installer_state.h
-index d8d444e685734..7a92dbaa9f965 100644
+index d8d444e..7a92dba 100644
 --- a/chrome/installer/setup/installer_state.h
 +++ b/chrome/installer/setup/installer_state.h
 @@ -72,7 +72,11 @@ class InstallerState {
@@ -1141,7 +1319,7 @@ index d8d444e685734..7a92dbaa9f965 100644
  
  }  // namespace installer
 diff --git a/chrome/installer/setup/launch_chrome.cc b/chrome/installer/setup/launch_chrome.cc
-index a5d073d214b6e..b8bc64d803cf5 100644
+index a5d073d..b8bc64d 100644
 --- a/chrome/installer/setup/launch_chrome.cc
 +++ b/chrome/installer/setup/launch_chrome.cc
 @@ -24,19 +24,30 @@ base::CommandLine GetPostInstallLaunchCommand(
@@ -1194,7 +1372,7 @@ index a5d073d214b6e..b8bc64d803cf5 100644
    }
    DCHECK_NE(ret, static_cast<int>(STILL_ACTIVE));
 diff --git a/chrome/installer/setup/setup_util.cc b/chrome/installer/setup/setup_util.cc
-index 56e12e6bbfb0d..fe423186dcea5 100644
+index 56e12e6..fe42318 100644
 --- a/chrome/installer/setup/setup_util.cc
 +++ b/chrome/installer/setup/setup_util.cc
 @@ -1,4 +1,4 @@
@@ -1232,7 +1410,7 @@ index 56e12e6bbfb0d..fe423186dcea5 100644
  
  int GetInstallAge(const InstallerState& installer_state) {
 diff --git a/chrome/installer/util/initial_preferences.cc b/chrome/installer/util/initial_preferences.cc
-index c1ecc73d63705..3b8dabfb4be5a 100644
+index c1ecc73..3b8dabf 100644
 --- a/chrome/installer/util/initial_preferences.cc
 +++ b/chrome/installer/util/initial_preferences.cc
 @@ -4,6 +4,10 @@
@@ -1282,7 +1460,7 @@ index c1ecc73d63705..3b8dabfb4be5a 100644
 +
  }  // namespace installer
 diff --git a/chrome/installer/util/initial_preferences.h b/chrome/installer/util/initial_preferences.h
-index e5dc6ab6d412f..74d1b90978f59 100644
+index e5dc6ab..74d1b90 100644
 --- a/chrome/installer/util/initial_preferences.h
 +++ b/chrome/installer/util/initial_preferences.h
 @@ -249,6 +249,9 @@ class InitialPreferences {
@@ -1296,7 +1474,7 @@ index e5dc6ab6d412f..74d1b90978f59 100644
  
  #endif  // CHROME_INSTALLER_UTIL_INITIAL_PREFERENCES_H_
 diff --git a/chrome/installer/util/initial_preferences_constants.h b/chrome/installer/util/initial_preferences_constants.h
-index 77f64cdf36079..7c9a6bbc64c1f 100644
+index 77f64cd..7c9a6bb 100644
 --- a/chrome/installer/util/initial_preferences_constants.h
 +++ b/chrome/installer/util/initial_preferences_constants.h
 @@ -84,6 +84,9 @@ inline constexpr char kBookmarksBlock[] = "bookmarks";
@@ -1310,7 +1488,7 @@ index 77f64cdf36079..7c9a6bbc64c1f 100644
  }  // namespace installer
  
 diff --git a/chrome/installer/util/logging_installer.cc b/chrome/installer/util/logging_installer.cc
-index 4734595db4123..c370834634df7 100644
+index 4734595..c370834 100644
 --- a/chrome/installer/util/logging_installer.cc
 +++ b/chrome/installer/util/logging_installer.cc
 @@ -5,6 +5,7 @@
@@ -1466,7 +1644,7 @@ index 4734595db4123..c370834634df7 100644
  }
  
 diff --git a/chrome/installer/util/logging_installer.h b/chrome/installer/util/logging_installer.h
-index 0e3845d610127..2fd12a4720483 100644
+index 0e3845d..2fd12a4 100644
 --- a/chrome/installer/util/logging_installer.h
 +++ b/chrome/installer/util/logging_installer.h
 @@ -43,6 +43,9 @@ enum TruncateResult {
@@ -1480,7 +1658,7 @@ index 0e3845d610127..2fd12a4720483 100644
  void InitInstallerLogging(const installer::InitialPreferences& prefs);
  
 diff --git a/chrome/installer/util/util_constants.cc b/chrome/installer/util/util_constants.cc
-index 649e0d5f4db51..7c6eec238a572 100644
+index 649e0d5..7c6eec2 100644
 --- a/chrome/installer/util/util_constants.cc
 +++ b/chrome/installer/util/util_constants.cc
 @@ -1,4 +1,4 @@
@@ -1527,7 +1705,7 @@ index 649e0d5f4db51..7c6eec238a572 100644
  const wchar_t kChromeProxyNewExe[] = L"new_chrome_proxy.exe";
  const wchar_t kChromeProxyOldExe[] = L"old_chrome_proxy.exe";
 diff --git a/chrome/installer/util/util_constants.h b/chrome/installer/util/util_constants.h
-index eb24d9675dc22..5b3a10610ca8c 100644
+index eb24d96..5b3a106 100644
 --- a/chrome/installer/util/util_constants.h
 +++ b/chrome/installer/util/util_constants.h
 @@ -202,6 +202,7 @@ extern const char kUncompressedArchive[];
