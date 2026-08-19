@@ -53,6 +53,7 @@
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
 #include "chrome/browser/sharing_hub/sharing_hub_features.h"
 #include "chrome/browser/tab_group_sync/tab_group_sync_service_factory.h"
+#include "chrome/browser/thorium_url_utils.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/ui/accelerator_utils.h"
 #include "chrome/browser/ui/autofill/address_bubbles_controller.h"
@@ -2466,7 +2467,9 @@ bool IsDebuggerAttachedToCurrentTab(Browser* browser) {
 
 void CopyURL(BrowserWindowInterface* bwi, content::WebContents* web_contents) {
   ui::ScopedClipboardWriter scw(ui::ClipboardBuffer::kCopyPaste);
-  scw.WriteText(base::UTF8ToUTF16(web_contents->GetVisibleURL().spec()));
+  const GURL display_url =
+      thorium::GetInternalURLForDisplay(web_contents->GetVisibleURL());
+  scw.WriteText(base::UTF8ToUTF16(display_url.spec()));
 
 #if !BUILDFLAG(IS_ANDROID)
   if (toast_features::IsEnabled(toast_features::kLinkCopiedToast)) {

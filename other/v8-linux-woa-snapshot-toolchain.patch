@@ -1,0 +1,19 @@
+diff --git a/gni/snapshot_toolchain.gni b/gni/snapshot_toolchain.gni
+index 37ed262640d..f9973c0cd0b 100644
+--- a/gni/snapshot_toolchain.gni
++++ b/gni/snapshot_toolchain.gni
+@@ -46,7 +46,13 @@ declare_args() {
+ # https://crbug.com/625353.
+ 
+ if (v8_snapshot_toolchain == "") {
+-  if (current_os == host_os && current_cpu == host_cpu) {
++  if (host_os == "linux" && host_cpu == "x64" && current_os == "win" &&
++      v8_current_cpu == "arm64") {
++    # Generate the Windows ARM64 snapshot with V8's ARM64 simulator. The
++    # generic host toolchain produces a host-configured snapshot that is not
++    # compatible with the native Windows ARM64 runtime.
++    v8_snapshot_toolchain = "//build/toolchain/linux:clang_x64_v8_arm64"
++  } else if (current_os == host_os && current_cpu == host_cpu) {
+     # This is not a cross-compile, so build the snapshot with the current
+     # toolchain.
+     v8_snapshot_toolchain = current_toolchain

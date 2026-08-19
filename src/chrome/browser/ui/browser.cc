@@ -88,6 +88,7 @@
 #include "chrome/browser/tab_contents/tab_util.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
+#include "chrome/browser/thorium_url_utils.h"
 #include "chrome/browser/ui/blocked_content/chrome_popup_navigation_delegate.h"
 #include "chrome/browser/ui/blocked_content/framebust_block_tab_helper.h"
 #include "chrome/browser/ui/bookmarks/bookmark_bar_controller.h"
@@ -2247,6 +2248,7 @@ void Browser::SetContentsBounds(WebContents* source, const gfx::Rect& bounds) {
 }
 
 void Browser::UpdateTargetURL(WebContents* source, const GURL& url) {
+  const GURL display_url = thorium::GetInternalURLForDisplay(url);
   std::vector<StatusBubble*> status_bubbles = GetStatusBubbles();
   for (StatusBubble* status_bubble : status_bubbles) {
     StatusBubbleViews* status_bubble_views =
@@ -2254,7 +2256,7 @@ void Browser::UpdateTargetURL(WebContents* source, const GURL& url) {
     ContentsWebView* anchor =
         static_cast<ContentsWebView*>(status_bubble_views->base_view());
     if (source == anchor->GetWebContents()) {
-      status_bubble->SetURL(url);
+      status_bubble->SetURL(display_url);
       break;
     }
   }

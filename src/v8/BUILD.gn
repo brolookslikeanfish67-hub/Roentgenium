@@ -330,7 +330,14 @@ declare_args() {
   # ARM64. Enable it by default for simulator builds and when native code
   # supports it as well. On Mac, control-flow integrity does not work so we
   # avoid enabling it when using the simulator.
+  #
+  # A Linux x64 mksnapshot targeting Windows ARM64 must match the Windows
+  # runtime, where arm_control_flow_integrity defaults to "none". Enabling
+  # simulator-only pointer authentication would produce an incompatible
+  # startup snapshot.
   v8_control_flow_integrity = v8_current_cpu == "arm64" &&
+                              !(host_os == "linux" && host_cpu == "x64" &&
+                                target_os == "win" && target_cpu == "arm64") &&
                               ((v8_target_is_simulator && target_os != "mac") ||
                                arm_control_flow_integrity != "none")
 

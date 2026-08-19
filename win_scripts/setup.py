@@ -142,6 +142,8 @@ patches = [
     "other/open_in_same_tab.patch",
     "other/thorium_webui.patch",
     "other/thorium-debug-log-name.patch",
+    "other/thorium-internal-url-scheme-alias.patch",
+    "other/thorium-internal-url-scheme-branding.patch",
     "other/disable-ai-entrypoints-by-default.patch",
     "other/disable-privacy-sandbox.patch",
     "other/win_updater.patch",
@@ -253,6 +255,8 @@ try_run(f"git apply --reject open_in_same_tab.patch")
 try_run(f"git apply --reject allow_manifest_v2_extensions.patch")
 try_run(f"git apply --reject thorium_webui.patch")
 try_run(f"git apply --reject thorium-debug-log-name.patch")
+try_run(f"git apply --reject thorium-internal-url-scheme-alias.patch")
+try_run(f"git apply --reject thorium-internal-url-scheme-branding.patch")
 try_run(f"git apply --reject disable-ai-entrypoints-by-default.patch")
 try_run(f"git apply --reject win_updater.patch")
 try_run(f"git apply --reject keyboard_shortcuts.patch")
@@ -280,6 +284,18 @@ os.chdir(cr_src_dir)
 try_run(f"git apply --reject android-extensions-support.patch")
 try_run(f"git apply --reject chrome-web-store-protection.patch")
 try_run(f"git apply --reject enable-extension-in-incognito.patch")
+
+
+print("\nApplying Linux-to-Windows ARM64 V8 snapshot toolchain patch...\n")
+v8_dir = os.path.join(cr_src_dir, "v8")
+copy(
+    os.path.normpath(
+        os.path.join(thor_src_dir, "other", "v8-linux-woa-snapshot-toolchain.patch")
+    ),
+    os.path.normpath(v8_dir),
+)
+os.chdir(v8_dir)
+try_run(f"git apply --reject v8-linux-woa-snapshot-toolchain.patch")
 
 
 # try_run(f"git apply --reject fix_file_dialog_crash.patch")

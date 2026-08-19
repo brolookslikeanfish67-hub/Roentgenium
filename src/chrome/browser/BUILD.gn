@@ -1511,6 +1511,8 @@ static_library("browser") {
     "tab_group_sync/tab_group_trial.h",
     "thorium_flag_choices.h",
     "thorium_flag_entries.h",
+    "thorium_url_utils.cc",
+    "thorium_url_utils.h",
     "tpcd/experiment/eligibility_service.cc",
     "tpcd/experiment/eligibility_service.h",
     "tpcd/experiment/eligibility_service_factory.cc",

@@ -102,6 +102,8 @@ patchThor () {
 	cp -v other/open_in_same_tab.patch ${CR_SRC_DIR}/ &&
 	cp -v other/thorium_webui.patch ${CR_SRC_DIR}/ &&
 	cp -v other/thorium-debug-log-name.patch ${CR_SRC_DIR}/ &&
+	cp -v other/thorium-internal-url-scheme-alias.patch ${CR_SRC_DIR}/ &&
+	cp -v other/thorium-internal-url-scheme-branding.patch ${CR_SRC_DIR}/ &&
 	cp -v other/disable-ai-entrypoints-by-default.patch ${CR_SRC_DIR}/ &&
 	cp -v other/disable-privacy-sandbox.patch ${CR_SRC_DIR}/ &&
 	cp -v other/win_updater.patch ${CR_SRC_DIR}/ &&
@@ -135,6 +137,7 @@ patchThor () {
 	cp -v other/android-extensions-support.patch ${CR_SRC_DIR}/ &&
 	cp -v other/chrome-web-store-protection.patch ${CR_SRC_DIR}/ &&
 	cp -v other/enable-extension-in-incognito.patch ${CR_SRC_DIR}/ &&
+	cp -v other/v8-linux-woa-snapshot-toolchain.patch ${CR_SRC_DIR}/v8/ &&
 
 	printf "\n" &&
 	printf "${YEL}Patching FFMPEG for HEVC...${c0}\n" &&
@@ -187,6 +190,10 @@ patchThor () {
 	git apply --reject ./thorium_webui.patch &&
 	printf "${YEL}Thorium debug log name patch...${c0}\n" &&
 	git apply --reject ./thorium-debug-log-name.patch &&
+	printf "${YEL}Thorium internal URL scheme alias patch...${c0}\n" &&
+	git apply --reject ./thorium-internal-url-scheme-alias.patch &&
+	printf "${YEL}Thorium internal URL scheme branding patch...${c0}\n" &&
+	git apply --reject ./thorium-internal-url-scheme-branding.patch &&
 	printf "${YEL}Disable AI entrypoints by default patch...${c0}\n" &&
 	git apply --reject ./disable-ai-entrypoints-by-default.patch &&
 	printf "${YEL}Thorium Updater patch...${c0}\n" &&
@@ -213,7 +220,10 @@ patchThor () {
 	printf "${YEL}Chrome Web Store protection patch...${c0}\n" &&
 	git apply --reject ./chrome-web-store-protection.patch &&
 	printf "${YEL}Enable extension in incognito patch...${c0}\n" &&
-	git apply --reject ./enable-extension-in-incognito.patch
+	git apply --reject ./enable-extension-in-incognito.patch &&
+	printf "${YEL}Linux-to-Windows ARM64 V8 snapshot toolchain patch...${c0}\n" &&
+	cd ${CR_SRC_DIR}/v8 &&
+	git apply --reject ./v8-linux-woa-snapshot-toolchain.patch
 	# git apply --reject ./fix_file_dialog_crash.patch &&
 	# git apply --reject ./fix_wayland_scale_crash.patch &&
 	# git apply --reject ./fix_setting_popover_invoker_crash.patch &&

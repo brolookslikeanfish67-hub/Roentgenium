@@ -13,6 +13,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
+#include "chrome/browser/thorium_url_utils.h"
 #include "chrome/browser/ui/login/login_tab_helper.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
@@ -60,9 +61,12 @@ std::u16string
 ChromeLocationBarModelDelegate::FormattedStringWithEquivalentMeaning(
     const GURL& url,
     const std::u16string& formatted_url) const {
+  const GURL display_url = thorium::GetInternalURLForDisplay(url);
+  const std::u16string display_text =
+      thorium::GetInternalURLTextForDisplay(url, formatted_url);
   return AutocompleteInput::FormattedStringWithEquivalentMeaning(
-      url, formatted_url, ChromeAutocompleteSchemeClassifier(GetProfile()),
-      nullptr);
+      display_url, display_text,
+      ChromeAutocompleteSchemeClassifier(GetProfile()), nullptr);
 }
 
 bool ChromeLocationBarModelDelegate::GetURL(GURL* url) const {

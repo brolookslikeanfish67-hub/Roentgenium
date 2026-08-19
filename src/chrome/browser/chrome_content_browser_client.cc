@@ -526,6 +526,7 @@
 #include "chrome/browser/search/instant_service_factory.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
+#include "chrome/browser/thorium_url_utils.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -4904,6 +4905,8 @@ bool ChromeContentBrowserClient::
 
 void ChromeContentBrowserClient::BrowserURLHandlerCreated(
     BrowserURLHandler* handler) {
+  handler->AddPreHandler(&thorium::RewriteInternalURLAlias);
+
   // The group policy NTP URL handler must be registered before the other NTP
   // URL handlers below. Also register it before the "parts" handlers, so the
   // NTP policy takes precedence over extensions that override the NTP.

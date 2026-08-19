@@ -69,6 +69,7 @@ void RegisterContentSchemes(bool should_lock_registry) {
 
   url::AddStandardScheme(kChromeDevToolsScheme, url::SCHEME_WITH_HOST);
   url::AddStandardScheme(kChromeUIScheme, url::SCHEME_WITH_HOST);
+  url::AddStandardScheme(kThoriumUIScheme, url::SCHEME_WITH_HOST);
   url::AddStandardScheme(kChromeUIUntrustedScheme, url::SCHEME_WITH_HOST);
   url::AddStandardScheme(kChromeErrorScheme, url::SCHEME_WITH_HOST);
   for (auto& scheme : schemes.standard_schemes)
