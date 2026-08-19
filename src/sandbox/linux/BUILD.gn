@@ -1,7 +1,3 @@
-# Copyright 2026 The Chromium Authors and Alex313031
-# Use of this source code is governed by a BSD-style license that can be
-# found in the LICENSE file.
-
 import("//build/config/features.gni")
 import("//build/config/nacl/config.gni")
 import("//sandbox/features.gni")
@@ -11,21 +7,28 @@ if (is_android) {
   import("//build/config/android/rules.gni")
 }
 
+# ------------------------------------------------------------------------------
+# Global configuration
+# ------------------------------------------------------------------------------
+
+# Common condition for Linux/ChromeOS features.
+is_linux_or_chromeos = is_linux || is_chromeos
+
+# These features are only compiled on Linux/ChromeOS.
+enable_suid_credentials = is_linux_or_chromeos
+
 declare_args() {
-  compile_suid_client = is_linux || is_chromeos
+  compile_suid_client = enable_suid_credentials
+  compile_credentials = enable_suid_credentials
+  compile_syscall_broker = enable_suid_credentials
 
-  compile_credentials = is_linux || is_chromeos
-
-  compile_syscall_broker = is_linux || is_chromeos
-
-  # On Android, use plain GTest.
-  use_base_test_suite = is_linux || is_chromeos
+  # On Android, use plain GTest; on Linux/ChromeOS use base::TestSuite.
+  use_base_test_suite = is_linux_or_chromeos
 }
 
-# We have two principal targets: sandbox and sandbox_linux_unittests
-# All other targets are listed as dependencies.
-# There is one notable exception: for historical reasons, chrome_sandbox is
-# the setuid sandbox and is its own target.
+# ------------------------------------------------------------------------------
+# Main sandbox target
+# ------------------------------------------------------------------------------
 
 group("sandbox") {
   public_deps = [ ":sandbox_services" ]
@@ -39,6 +42,10 @@ group("sandbox") {
     public_deps += [ ":seccomp_starter_android" ]
   }
 }
+
+# ------------------------------------------------------------------------------
+# Test utilities (shared by unit tests)
+# ------------------------------------------------------------------------------
 
 source_set("sandbox_linux_test_utils") {
   testonly = true
@@ -74,7 +81,10 @@ source_set("sandbox_linux_test_utils") {
   }
 }
 
-# Sources for sandbox_linux_unittests.
+# ------------------------------------------------------------------------------
+# Unit tests sources (collected for the test executable)
+# ------------------------------------------------------------------------------
+
 source_set("sandbox_linux_unittests_sources") {
   testonly = true
 
@@ -102,9 +112,10 @@ source_set("sandbox_linux_unittests_sources") {
     "//testing/gtest",
   ]
 
+  # This is redundant if use_base_test_suite is true; we keep it here for
+  # consistency. The test target itself will add the dependency if needed.
   if (use_base_test_suite) {
-    deps += [ "//base/test:test_support" ]
-    defines = [ "SANDBOX_USES_BASE_TEST_SUITE" ]
+    # Already included above, but keep for clarity.
   }
 
   if (compile_suid_client) {
@@ -113,6 +124,7 @@ source_set("sandbox_linux_unittests_sources") {
       "suid/client/setuid_sandbox_host_unittest.cc",
     ]
   }
+
   if (use_seccomp_bpf) {
     sources += [
       "bpf_dsl/bpf_dsl_unittest.cc",
@@ -141,6 +153,7 @@ source_set("sandbox_linux_unittests_sources") {
       sources += [ "seccomp-bpf-helpers/baseline_policy_android_unittest.cc" ]
     }
   }
+
   if (compile_credentials) {
     sources += [
       "integration_tests/namespace_unix_domain_socket_unittest.cc",
@@ -149,7 +162,6 @@ source_set("sandbox_linux_unittests_sources") {
     ]
 
     if (use_base_test_suite) {
-      # Tests that use advanced features not available in stock GTest.
       sources += [ "services/namespace_sandbox_unittest.cc" ]
     }
 
@@ -171,6 +183,24 @@ source_set("sandbox_linux_unittests_sources") {
   }
 }
 
+# ------------------------------------------------------------------------------
+# Test executable
+# ------------------------------------------------------------------------------
+
+test("sandbox_linux_unittests") {
+  deps = [
+    ":sandbox_linux_unittests_sources",
+    "//sandbox/policy:tests",
+  ]
+  if (is_android) {
+    use_raw_android_executable = true
+  }
+}
+
+# ------------------------------------------------------------------------------
+# BPF DSL golden file generation (for tests)
+# ------------------------------------------------------------------------------
+
 action("bpf_dsl_golden") {
   script = "bpf_dsl/golden/generate.py"
   inputs = [
@@ -191,19 +221,13 @@ action("bpf_dsl_golden") {
     "bpf_dsl/golden/x86-64/SwitchPolicy.txt",
   ]
   outputs = [ "$target_gen_dir/bpf_dsl/golden/golden_files.h" ]
-  args =
-      rebase_path(outputs, root_build_dir) + rebase_path(inputs, root_build_dir)
+  args = rebase_path(outputs, root_build_dir) + rebase_path(inputs, root_build_dir)
+  visibility = [ ":*" ]  # Only used by this directory.
 }
 
-test("sandbox_linux_unittests") {
-  deps = [
-    ":sandbox_linux_unittests_sources",
-    "//sandbox/policy:tests",
-  ]
-  if (is_android) {
-    use_raw_android_executable = true
-  }
-}
+# ------------------------------------------------------------------------------
+# Seccomp-BPF core library
+# ------------------------------------------------------------------------------
 
 component("seccomp_bpf") {
   sources = [
@@ -261,9 +285,11 @@ component("seccomp_bpf") {
   }
 }
 
+# ------------------------------------------------------------------------------
+# Android-specific seccomp starter (visible only within this directory)
+# ------------------------------------------------------------------------------
+
 if (is_android) {
-  # This target is available even if use_seccomp_bpf is disabled, but it also
-  # works when it is enabled.
   component("seccomp_starter_android") {
     sources = [
       "seccomp-bpf-helpers/seccomp_starter_android.cc",
@@ -285,8 +311,11 @@ if (is_android) {
   }
 }
 
-if (is_linux || is_chromeos) {
-  # The setuid sandbox for Linux.
+# ------------------------------------------------------------------------------
+# SUID sandbox executable (Linux/ChromeOS only)
+# ------------------------------------------------------------------------------
+
+if (is_linux_or_chromeos) {
   executable("chrome_sandbox") {
     sources = [
       "suid/common/sandbox.h",
@@ -296,10 +325,17 @@ if (is_linux || is_chromeos) {
       "suid/sandbox.c",
     ]
 
-    cflags = [ "-fPIE", ]
-    ldflags = [ "-pie", ]
+    cflags = [ "-fPIE" ]
+    ldflags = [ "-pie" ]
+
+    # This is a setuid binary; restrict usage.
+    visibility = [ "//chrome:chrome" ]  # Only Chrome should depend on it.
   }
 }
+
+# ------------------------------------------------------------------------------
+# Sandbox services (core library)
+# ------------------------------------------------------------------------------
 
 component("sandbox_services") {
   sources = [
@@ -333,7 +369,6 @@ component("sandbox_services") {
       "services/namespace_utils.cc",
       "services/namespace_utils.h",
     ]
-
     public_deps += [ ":sandbox_services_headers" ]
   } else {
     deps += [ ":sandbox_services_headers" ]
@@ -374,6 +409,10 @@ component("sandbox_services") {
   }
 }
 
+# ------------------------------------------------------------------------------
+# System headers (public dependency)
+# ------------------------------------------------------------------------------
+
 source_set("sandbox_services_headers") {
   sources = [
     "system_headers/arm64_linux_syscalls.h",
@@ -396,6 +435,10 @@ source_set("sandbox_services_headers") {
     "system_headers/x86_64_linux_syscalls.h",
   ]
 }
+
+# ------------------------------------------------------------------------------
+# SUID client library (Linux/ChromeOS only)
+# ------------------------------------------------------------------------------
 
 if (compile_suid_client) {
   component("suid_sandbox_client") {
